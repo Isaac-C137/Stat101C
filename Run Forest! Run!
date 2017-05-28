@@ -1,0 +1,73 @@
+############################################################
+##Forest
+############################################################
+
+#read data
+test <- read.csv("testing.without.csv")
+train <- read.csv("lafdtraining.csv")
+
+
+library(randomForest)
+library(lubridate)
+library(tree)
+#convert Incident.Creation.Time..GMT. to seconds
+train$Incident.Creation.Time..GMT.<-  period_to_seconds(hms(train$Incident.Creation.Time..GMT.))
+test$Incident.Creation.Time..GMT.<-  period_to_seconds(hms(test$Incident.Creation.Time..GMT.))
+
+
+set.seed(1)
+#doesn't work with N/A values:
+#We may need to investigate this further to insure no bias is introduced 
+train <- na.omit(train)
+#Can not handle categorical predictors with more than 53 categories.
+train <- train[,-2]
+#this one needs to be added back in, I only deleted it so this would run
+train <- train[,-7]
+
+
+#I tried building 1 tree based on 200 rows from the training set
+#(this is our 1st submission)
+samp <- sample(1:2315060,200)
+tree1 <- tree(elapsed_time~.,data=train,subset=samp)
+
+prediction = predict (tree1 , newdata=test)
+row.id <- test$row.id
+preds <- data.frame(row.id,prediction)
+write.csv(preds, "preds.csv", row.names=FALSE)
+
+
+
+##In this section i create k trees from a sample of 200 rows
+##the prediction is the mean (i know, i know) of those k trees predictions
+#(this is our 2nd submission)
+k=100
+forest <- data.frame(c(1:530352))
+for(i in 1:k){
+  samp <- sample(1:2315060,200)
+  vars <- c(sample(1:8,3),9)
+  tree1 <- tree(elapsed_time~.,data=train[,vars],subset=samp)
+  forest<-cbind(forest, predict(tree1 , newdata=test))
+}
+
+fr<-apply(forest[ ,2:(k)], 1, mfv)
+a<- mean(forest[,2:(k)])
+preds <- c()
+forest <- forest[,-1]
+
+forest$mean <- rowMeans(forest, na.rm=TRUE)
+
+prediction = forest$mean
+row.id <- test$row.id
+preds <- data.frame(row.id,prediction)
+write.csv(preds, "preds.csv", row.names=FALSE)
+
+
+##This will not run atm, it takes a samle of size 2.3million to create
+##each tree in the forrest, i need a way to reduce this to 200-1000 range
+bag.train= randomForest(elapsed_time~.,data=train , mtry=4,importance =TRUE, ntree=25)
+bag.train
+
+prediction = predict (bag.train , newdata=test)
+row.id <- test$row.id
+preds <- data.frame(row.id,prediction)
+write.csv(preds, "preds.csv", row.names=FALSE)
